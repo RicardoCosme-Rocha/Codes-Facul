@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulador de CPU </title>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    table { border-collapse: collapse; margin-bottom: 15px; }
+    td, th { border: 1px solid black; padding: 5px 10px; }
+    .atual { background-color: yellow; }
+    #log { border: 1px solid black; height: 150px; overflow: auto; padding: 5px; }
+    button { margin: 3px; padding: 6px 10px; }
+    textarea { width: 250px; height: 110px; font-family: monospace; }
+    input { width: 80px; }
+    .erro { color: red; }
+  </style>
+</head>
+<body>
+
+  <h1>Simulador de CPU </h1>
+
+  <h3>1. Gravar valor na memoria</h3>
+  <p>Escolha um valor e o endereco.</p>
+  Valor: <input type="number" id="valor" value="5">
+  <br>
+  Endereco (0 a 15): <input type="number" id="endereco" value="1" min="0" max="15">
+  <br>
+  <button onclick="gravar()">Gravar</button>
+  <p id="erroGravar" class="erro"></p>
+
+  <h3>2. Escreva o programa</h3>
+  <p>Uma instrucao por linha. </p>
+  <p>Opcoes: LOAD x, ADD x, SUB x, STORE x, HALT (x vai de 0 a 15).</p>
+  <textarea id="codigo" oninput="carregarPrograma()">LOAD 1
+ADD 2
+STORE 3
+HALT</textarea>
+  <p id="erroPrograma" class="erro"></p>
+
+  <h3>3. Execute</h3>
+  <button onclick="passo()">Passo</button>
+  <button onclick="executarTudo()">Executar tudo</button>
+  <button onclick="reiniciarCPU()">Reiniciar CPU (mantem a memoria)</button>
+  <button onclick="limparMemoria()">Limpar memoria</button>
+  <button onclick="limparHistorico()">Limpar historico</button>
+
+  <h3>Registradores</h3>
+  <p>PC (proxima instrucao): <b id="pc">0</b></p>
+  <p>ACC (acumulador): <b id="acc">0</b></p>
+  <p>Estado: <b id="estado">pronto</b></p>
+
+  <h3>Programa carregado</h3>
+  <table id="tabelaPrograma"></table>
+
+  <h3>Memoria de dados</h3>
+  <table id="tabelaMemoria"></table>
+
+  <h3>Resultado</h3>
+  <p id="resultado"></p>
+
+  <h3>Logs</h3>
+  <div id="log"></div>
+
+  <script>
+    // Lista de instrucoes (montada a partir do texto da caixa)
+    var programa = [];
+
+    // Variaveis da CPU
+    var memoria = [];
+    var pc = 0;
+    var acc = 0;
+    var parou = false;
+    var ultimaGravada = -1; // ultima posicao da memoria que foi alterada (destaque amarelo)
+    var ultimoStore = -1;   // ultima posicao gravada por um STORE do programa
+
+    // Comeca com a memoria toda zerada
+    for (var i = 0; i < 16; i++) {
+      memoria[i] = 0;
+    }
+
+    // Escreve uma linha no log
+    function escrever(texto) {
+      document.getElementById("log").innerHTML += texto + "<br>";
+    }
+
+    // Apaga o historico (log) e o texto do resultado
+    // Nao mexe na memoria, no programa nem nos registradores
+    function limparHistorico() {
+      document.getElementById("log").innerHTML = "";
+      document.getElementById("resultado").innerHTML = "";
+    }
+    
+    // Le o texto da caixa e transforma em lista de instrucoes
+    // Retorna true se deu certo e false se tiver erro
+    function lerPrograma() {
+      var linhas = document.getElementById("codigo").value.split("\n");
+      var novo = [];
+      document.getElementById("erroPrograma").innerHTML = "";
+
+      for (var i = 0; i < linhas.length; i++) {
+        var texto = linhas[i].trim().toUpperCase();
+        if (texto == "") {
+          continue; // pula linha vazia
+        }
+        var partes = texto.split(/\s+/); // aceita varios espacos ou tab
+        var nome = partes[0];
+        var endereco = 0;
+
+        if (nome != "LOAD" && nome != "ADD" && nome != "SUB" && nome != "STORE" && nome != "HALT") {
+          document.getElementById("erroPrograma").innerHTML = "Erro na linha " + (i + 1) + ": instrucao '" + partes[0] + "' nao existe.";
+          return false;
+        }
+
+        if (nome != "HALT") {
+          endereco = Number(partes[1]);
+          if (partes.length < 2 || isNaN(endereco) || endereco < 0 || endereco > 15) {
+            document.getElementById("erroPrograma").innerHTML = "Erro na linha " + (i + 1) + ": o endereco deve ser um numero de 0 a 15.";
+            return false;
+          }
+        }
+
+        novo.push({ nome: nome, endereco: endereco });
+      }
+
+      if (novo.length == 0) {
+        document.getElementById("erroPrograma").innerHTML = "Escreva pelo menos uma instrucao.";
+        return false;
+      }
+
+      programa = novo;
+      return true;
+    }
+
+    // Atualiza tudo que aparece na tela
+    function desenhar() {
+      document.getElementById("pc").innerHTML = pc;
+      document.getElementById("acc").innerHTML = acc;
+      if (parou) {
+        document.getElementById("estado").innerHTML = "parada";
+      } else {
+        document.getElementById("estado").innerHTML = "pronto";
+      }
+
+      // Tabela do programa
+      var html = "<tr><th>Linha</th><th>Instrucao</th></tr>";
+      for (var i = 0; i < programa.length; i++) {
+        var classe = "";
+        if (i == pc && parou == false) {
+          classe = "atual";
+        }
+        html += "<tr class='" + classe + "'><td>" + i + "</td><td>" + programa[i].nome;
+        if (programa[i].nome != "HALT") {
+          html += " " + programa[i].endereco;
+        }
+        html += "</td></tr>";
+      }
+      document.getElementById("tabelaPrograma").innerHTML = html;
+
+      // Tabela da memoria (16 posicoes)
+      var html2 = "<tr><th>Endereco</th><th>Valor</th></tr>";
+      for (var j = 0; j < 16; j++) {
+        var classe2 = "";
+        if (j == ultimaGravada) {
+          classe2 = "atual";
+        }
+        html2 += "<tr class='" + classe2 + "'><td>" + j + "</td><td>" + memoria[j] + "</td></tr>";
+      }
+      document.getElementById("tabelaMemoria").innerHTML = html2;
+    }
+
+    // Grava um valor numa posicao da memoria (nao mexe nas outras)
+    function gravar() {
+      var texto = document.getElementById("valor").value;
+      var valor = Number(texto);
+      var endereco = Number(document.getElementById("endereco").value);
+      document.getElementById("erroGravar").innerHTML = "";
+
+      if (texto == "" || isNaN(valor)) {
+        document.getElementById("erroGravar").innerHTML = "Digite um valor numerico.";
+        return;
+      }
+      if (isNaN(endereco) || endereco < 0 || endereco > 15 || Math.floor(endereco) != endereco) {
+        document.getElementById("erroGravar").innerHTML = "O endereco deve ser um numero inteiro de 0 a 15.";
+        return;
+      }
+
+      memoria[endereco] = valor;
+      ultimaGravada = endereco;
+      escrever("Gravou " + valor + " na memoria[" + endereco + "]");
+      desenhar();
+    }
+
+    // Carrega o programa da caixa e volta a CPU para o comeco (a memoria NAO e apagada)
+    function carregarPrograma() {
+      pc = 0;
+      acc = 0;
+      ultimoStore = -1;
+      document.getElementById("resultado").innerHTML = "";
+      if (lerPrograma() == false) {
+        programa = [];
+        parou = true; // com erro, a CPU fica parada
+      } else {
+        parou = false;
+        escrever("Programa carregado com " + programa.length + " instrucoes.");
+      }
+      desenhar();
+    }
+
+    // Volta PC e ACC para zero, mas mantem a memoria como esta
+    function reiniciarCPU() {
+      document.getElementById("log").innerHTML = "";
+      carregarPrograma();
+      escrever("CPU reiniciada. A memoria foi mantida.");
+    }
+
+    // Zera todas as posicoes da memoria
+    function limparMemoria() {
+      for (var i = 0; i < 16; i++) {
+        memoria[i] = 0;
+      }
+      ultimaGravada = -1;
+      escrever("Memoria limpa.");
+      desenhar();
+    }
+
+    // Executa UMA instrucao
+    function passo() {
+      if (parou) {
+        escrever("A CPU esta parada. Clique em Reiniciar CPU.");
+        return;
+      }
+
+      // Se acabaram as instrucoes sem HALT, para sozinho
+      if (pc >= programa.length) {
+        parou = true;
+        escrever("Acabaram as instrucoes. A CPU parou.");
+        mostrarResultado();
+        desenhar();
+        return;
+      }
+
+      var instrucao = programa[pc];
+      escrever("Busca: pegou " + instrucao.nome + " da linha " + pc);
+      pc = pc + 1;
+
+      if (instrucao.nome == "LOAD") {
+        acc = memoria[instrucao.endereco];
+        escrever("Executa: ACC recebeu " + acc + " (memoria[" + instrucao.endereco + "])");
+      }
+      if (instrucao.nome == "ADD") {
+        acc = acc + memoria[instrucao.endereco];
+        escrever("Executa: somou memoria[" + instrucao.endereco + "], ACC agora e " + acc);
+      }
+      if (instrucao.nome == "SUB") {
+        acc = acc - memoria[instrucao.endereco];
+        escrever("Executa: subtraiu memoria[" + instrucao.endereco + "], ACC agora e " + acc);
+      }
+      if (instrucao.nome == "STORE") {
+        memoria[instrucao.endereco] = acc;
+        ultimaGravada = instrucao.endereco;
+        ultimoStore = instrucao.endereco;
+        escrever("Executa: gravou " + acc + " na memoria[" + instrucao.endereco + "]");
+      }
+      if (instrucao.nome == "HALT") {
+        parou = true;
+        escrever("Executa: HALT, a CPU parou.");
+        mostrarResultado();
+      }
+
+      desenhar();
+    }
+
+    // Executa ate a CPU parar (limite de 1000 passos para nao travar)
+    function executarTudo() {
+      if (parou) {
+        reiniciarCPU(); // se ja terminou, volta ao comeco (mantendo a memoria)
+      }
+      var contador = 0;
+      while (parou == false && contador < 1000) {
+        passo();
+        contador = contador + 1;
+      }
+    }
+
+    // Mostra o ultimo valor que o programa gravou com STORE
+    function mostrarResultado() {
+      if (ultimoStore == -1) {
+        document.getElementById("resultado").innerHTML = "O programa nao gravou nada (falta um STORE).";
+      } else {
+        document.getElementById("resultado").innerHTML = "Resultado: memoria[" + ultimoStore + "] = " + memoria[ultimoStore];
+      }
+    }
+
+    // Prepara a tela quando a pagina abre
+    carregarPrograma();
+  </script>
+
+</body>
+</html>
