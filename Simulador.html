@@ -62,36 +62,32 @@ HALT</textarea>
   <div id="log"></div>
 
   <script>
-    // Lista de instrucoes (montada a partir do texto da caixa)
+  
     var programa = [];
 
-    // Variaveis da CPU
+
     var memoria = [];
     var pc = 0;
     var acc = 0;
     var parou = false;
-    var ultimaGravada = -1; // ultima posicao da memoria que foi alterada (destaque amarelo)
-    var ultimoStore = -1;   // ultima posicao gravada por um STORE do programa
+    var ultimaGravada = -1; 
+    var ultimoStore = -1;   
 
-    // Comeca com a memoria toda zerada
+ 
     for (var i = 0; i < 16; i++) {
       memoria[i] = 0;
     }
 
-    // Escreve uma linha no log
+
     function escrever(texto) {
       document.getElementById("log").innerHTML += texto + "<br>";
     }
 
-    // Apaga o historico (log) e o texto do resultado
-    // Nao mexe na memoria, no programa nem nos registradores
     function limparHistorico() {
       document.getElementById("log").innerHTML = "";
       document.getElementById("resultado").innerHTML = "";
     }
     
-    // Le o texto da caixa e transforma em lista de instrucoes
-    // Retorna true se deu certo e false se tiver erro
     function lerPrograma() {
       var linhas = document.getElementById("codigo").value.split("\n");
       var novo = [];
@@ -100,9 +96,9 @@ HALT</textarea>
       for (var i = 0; i < linhas.length; i++) {
         var texto = linhas[i].trim().toUpperCase();
         if (texto == "") {
-          continue; // pula linha vazia
+          continue; 
         }
-        var partes = texto.split(/\s+/); // aceita varios espacos ou tab
+        var partes = texto.split(/\s+/); 
         var nome = partes[0];
         var endereco = 0;
 
@@ -131,7 +127,6 @@ HALT</textarea>
       return true;
     }
 
-    // Atualiza tudo que aparece na tela
     function desenhar() {
       document.getElementById("pc").innerHTML = pc;
       document.getElementById("acc").innerHTML = acc;
@@ -141,7 +136,7 @@ HALT</textarea>
         document.getElementById("estado").innerHTML = "pronto";
       }
 
-      // Tabela do programa
+
       var html = "<tr><th>Linha</th><th>Instrucao</th></tr>";
       for (var i = 0; i < programa.length; i++) {
         var classe = "";
@@ -156,7 +151,7 @@ HALT</textarea>
       }
       document.getElementById("tabelaPrograma").innerHTML = html;
 
-      // Tabela da memoria (16 posicoes)
+
       var html2 = "<tr><th>Endereco</th><th>Valor</th></tr>";
       for (var j = 0; j < 16; j++) {
         var classe2 = "";
@@ -168,7 +163,6 @@ HALT</textarea>
       document.getElementById("tabelaMemoria").innerHTML = html2;
     }
 
-    // Grava um valor numa posicao da memoria (nao mexe nas outras)
     function gravar() {
       var texto = document.getElementById("valor").value;
       var valor = Number(texto);
@@ -190,7 +184,7 @@ HALT</textarea>
       desenhar();
     }
 
-    // Carrega o programa da caixa e volta a CPU para o comeco (a memoria NAO e apagada)
+
     function carregarPrograma() {
       pc = 0;
       acc = 0;
@@ -198,7 +192,7 @@ HALT</textarea>
       document.getElementById("resultado").innerHTML = "";
       if (lerPrograma() == false) {
         programa = [];
-        parou = true; // com erro, a CPU fica parada
+        parou = true; 
       } else {
         parou = false;
         escrever("Programa carregado com " + programa.length + " instrucoes.");
@@ -206,14 +200,13 @@ HALT</textarea>
       desenhar();
     }
 
-    // Volta PC e ACC para zero, mas mantem a memoria como esta
+
     function reiniciarCPU() {
       document.getElementById("log").innerHTML = "";
       carregarPrograma();
       escrever("CPU reiniciada. A memoria foi mantida.");
     }
 
-    // Zera todas as posicoes da memoria
     function limparMemoria() {
       for (var i = 0; i < 16; i++) {
         memoria[i] = 0;
@@ -223,14 +216,14 @@ HALT</textarea>
       desenhar();
     }
 
-    // Executa UMA instrucao
+
     function passo() {
       if (parou) {
         escrever("A CPU esta parada. Clique em Reiniciar CPU.");
         return;
       }
 
-      // Se acabaram as instrucoes sem HALT, para sozinho
+ 
       if (pc >= programa.length) {
         parou = true;
         escrever("Acabaram as instrucoes. A CPU parou.");
@@ -270,10 +263,10 @@ HALT</textarea>
       desenhar();
     }
 
-    // Executa ate a CPU parar (limite de 1000 passos para nao travar)
+ 
     function executarTudo() {
       if (parou) {
-        reiniciarCPU(); // se ja terminou, volta ao comeco (mantendo a memoria)
+        reiniciarCPU(); 
       }
       var contador = 0;
       while (parou == false && contador < 1000) {
@@ -282,7 +275,7 @@ HALT</textarea>
       }
     }
 
-    // Mostra o ultimo valor que o programa gravou com STORE
+   
     function mostrarResultado() {
       if (ultimoStore == -1) {
         document.getElementById("resultado").innerHTML = "O programa nao gravou nada (falta um STORE).";
@@ -291,7 +284,6 @@ HALT</textarea>
       }
     }
 
-    // Prepara a tela quando a pagina abre
     carregarPrograma();
   </script>
 
